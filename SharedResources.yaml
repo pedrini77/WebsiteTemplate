@@ -1,0 +1,121 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Shared Resources
+Mappings:
+  Conf:
+    Settings:
+      AvailabilityZone1: us-east-1b
+      AvailabilityZone2: us-east-1c
+Resources:
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName:
+        Ref: AWS::StackName
+  LaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      BlockDeviceMappings:
+      - DeviceName: "/dev/xvdcz"
+        Ebs:
+          VolumeSize: '22'
+          VolumeType: gp2
+          DeleteOnTermination: 'true'
+      IamInstanceProfile:
+        Fn::ImportValue: EC2-InstanceProfile
+      ImageId: ami-9eb4b1e5
+      InstanceMonitoring: 'False'
+      InstanceType: t2.micro
+      KeyName: key
+      SecurityGroups:
+      - Fn::ImportValue: Security-SGInstances
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          echo ECS_CLUSTER=${Cluster} >> /etc/ecs/ecs.config
+          yum install -y aws-cfn-bootstrap
+          curl -O https://bootstrap.pypa.io/get-pip.py
+          # TO DO - Add EFS configuration
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchConfigurationName:
+        Ref: LaunchConfiguration
+      AvailabilityZones:
+      - Fn::FindInMap:
+        - Conf
+        - Settings
+        - AvailabilityZone1
+      - Fn::FindInMap:
+        - Conf
+        - Settings
+        - AvailabilityZone2
+      Cooldown: '500'
+      DesiredCapacity: '1'
+      HealthCheckGracePeriod: '300'
+      HealthCheckType: EC2
+      MaxSize: '4'
+      MinSize: '1'
+      Tags:
+      - Key: Name
+        Value:
+          Ref: AWS::StackName
+        PropagateAtLaunch: 'True'
+      VPCZoneIdentifier:
+      - Fn::ImportValue: Network-PublicSubnet1
+      - Fn::ImportValue: Network-PublicSubnet2
+  PolicyScaleUp:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName:
+        Ref: AutoScalingGroup
+      AdjustmentType: ChangeInCapacity
+      Cooldown: '300'
+      PolicyType: SimpleScaling
+      ScalingAdjustment: '1'
+  AlarmIncreaseCPUReservation:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '3'
+      Statistic: Average
+      Threshold: '80'
+      AlarmName:
+        Fn::Sub: "${AWS::StackName}-High-CPU-Reservation"
+      AlarmDescription: Reserved CPU too high
+      Period: '60'
+      AlarmActions:
+      - Ref: PolicyScaleUp
+      Namespace: AWS/ECS
+      Dimensions:
+      - Name: ClusterName
+        Value:
+          Ref: Cluster
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: CPUReservation
+  AlarmIncreaseMemoryReservation:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '3'
+      Statistic: Average
+      Threshold: '80'
+      AlarmName:
+        Fn::Sub: "${AWS::StackName}--High-Memory-Reservation"
+      AlarmDescription: Reserved Memory too high
+      Period: '60'
+      AlarmActions:
+      - Ref: PolicyScaleUp
+      Namespace: AWS/ECS
+      Dimensions:
+      - Name: ClusterName
+        Value:
+          Ref: Cluster
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: MemoryReservation
+Outputs:
+  Cluster:
+    Description: ECS Cluster
+    Value:
+      Ref: Cluster
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-Cluster"

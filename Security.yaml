@@ -1,0 +1,74 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Shared Resources
+Parameters:
+  Source: 
+    Description: Enter your IP. /32 means just your IP in CIDR notation.
+    Type: String
+    Default: GetYourIpFromWhatIsMyIp.com/32
+Resources:
+  SGInstances:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow ALB in anything out
+      VpcId:
+        Fn::ImportValue: Network-VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '443'
+        ToPort: '443'
+        SourceSecurityGroupId:
+          Ref: SGLoadBalancer
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: 
+          Ref: Source
+      SecurityGroupEgress:
+      - IpProtocol: "-1"
+        FromPort: "-1"
+        ToPort: "-1"
+        CidrIp: 0.0.0.0/0
+      Tags:
+      - Key: Name
+        Value:
+          Ref: AWS::StackName
+  SGLoadBalancer:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow browser connetion in
+      VpcId:
+        Fn::ImportValue: Network-VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: '443'
+        ToPort: '443'
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: "-1"
+        FromPort: "-1"
+        ToPort: "-1"
+        CidrIp: 0.0.0.0/0
+      Tags:
+      - Key: Name
+        Value: 
+          Ref: AWS::StackName
+Outputs:
+  SGInstances:
+    Description: Base Security Group EC2 Instances
+    Value:
+      Ref: SGInstances
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-SGInstances"
+  SGLoadBalancer:
+    Description: Base Security Group for Application Load Balancer
+    Value:
+      Ref: SGLoadBalancer
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-SGLoadBalancer"
