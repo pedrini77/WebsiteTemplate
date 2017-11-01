@@ -1,6 +1,6 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Shared Resources
+Description: Security Groups and Roles
 Parameters:
   Source: 
     Description: Enter your IP. /32 means just your IP in CIDR notation.
@@ -15,8 +15,8 @@ Resources:
         Fn::ImportValue: Network-VPC
       SecurityGroupIngress:
       - IpProtocol: tcp
-        FromPort: '443'
-        ToPort: '443'
+        FromPort: '31000'
+        ToPort: '61000'
         SourceSecurityGroupId:
           Ref: SGLoadBalancer
       - IpProtocol: tcp
@@ -57,6 +57,159 @@ Resources:
       - Key: Name
         Value: 
           Ref: AWS::StackName
+  SGMountTarget:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId:
+        Fn::ImportValue: Network-VPC
+      GroupDescription: Security group for mount target
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '2049'
+        ToPort: '2049'
+        CidrIp: 
+          Fn::ImportValue: Network-VPC-CIDR
+      Tags:
+      - Key: Name
+        Value:
+          Ref: AWS::StackName
+  RoleECSService:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ecs.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: ecs-service
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - elasticloadbalancing:DeregisterInstancesFromLoadBalancer
+            - elasticloadbalancing:DeregisterTargets
+            - elasticloadbalancing:Describe*
+            - elasticloadbalancing:RegisterInstancesWithLoadBalancer
+            - elasticloadbalancing:RegisterTargets
+            - ec2:Describe*
+            - ec2:AuthorizeSecurityGroupIngress
+            Resource: "*"
+      RoleName: 
+        Fn::Sub: "${AWS::StackName}-ECS"
+  RoleAutoScaling:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - application-autoscaling.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: service-autoscaling
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - application-autoscaling:*
+            - cloudwatch:DescribeAlarms
+            - cloudwatch:PutMetricAlarm
+            - ecs:DescribeServices
+            - ecs:UpdateService
+            Resource: "*"
+      RoleName:
+        Fn::Sub: "${AWS::StackName}-AutoScaling"
+  RoleEC2:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: ecs-service
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - events:*
+            - cloudwatch:*
+            - ecs:CreateCluster
+            - ecs:DeregisterContainerInstance
+            - ecs:DiscoverPollEndpoint
+            - ecs:Poll
+            - ecs:RegisterContainerInstance
+            - ecs:StartTelemetrySession
+            - ecs:Submit*
+            - ecr:*
+            - elasticache:Describe*
+            - elasticfilesystem:Describe*
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - rds:Describe*
+            - s3:*
+            Resource: "*"
+      RoleName:
+        Fn::Sub: "${AWS::StackName}-EC2"
+  RoleLambdaECS:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - edgelambda.amazonaws.com
+            - lambda.amazonaws.com
+          Action: sts:AssumeRole
+      RoleName: USN-LambdaECS
+      Policies:
+      - PolicyName: lambda-service
+        PolicyDocument:
+          Statement:
+          - Sid: Stmt1000000000009
+            Effect: Allow
+            Action:
+            - ecs:*
+            Resource:
+            - "*"
+          - Sid: Stmt1000000000008
+            Effect: Allow
+            Action:
+            - ec2:*
+            Resource:
+            - "*"
+          - Sid: Stmt1000000000007
+            Effect: Allow
+            Action:
+            - cloudwatch:*
+            Resource:
+            - "*"
+          - Sid: Stmt10000000000006
+            Effect: Allow
+            Action:
+            - autoscaling:*
+            Resource:
+            - "*"
+  InstanceProfileEC2:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+      - Ref: RoleEC2
 Outputs:
   SGInstances:
     Description: Base Security Group EC2 Instances
@@ -72,3 +225,46 @@ Outputs:
     Export:
       Name:
         Fn::Sub: "${AWS::StackName}-SGLoadBalancer"
+  SGMountTarget:
+    Description: Base Security Group for MountTargets
+    Value:
+      Ref: SGMountTarget
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-SGMountTarget"
+  RoleECSService:
+    Description: Role needed for ECS service
+    Value:
+      Fn::GetAtt:
+      - RoleECSService
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-RoleECSService"
+  RoleAutoscaling:
+    Description: Role needed for ECS AutoScaling
+    Value:
+      Fn::GetAtt:
+      - RoleAutoScaling
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-RoleAutoscaling"
+  RoleLambdaECS:
+    Description: Role needed for ECS AutoScaling
+    Value:
+      Fn::GetAtt:
+      - RoleLambdaECS
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-RoleLambdaECS"
+  InstanceProfileEC2:
+    Description: Instance Profile for ECS Instance
+    Value:
+      Fn::GetAtt:
+      - InstanceProfileEC2
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-InstanceProfileEC2"

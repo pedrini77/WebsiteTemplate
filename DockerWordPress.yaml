@@ -1,0 +1,401 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Docker containers for wordpress site
+Parameters:
+  ConfigType:
+    Description: Free only or Full (includes HTTPS, Alarms & Route53 DNS entry)
+    Type: String
+    AllowedValues:
+    - FullConfig
+    - SmallConfig
+  Password:
+    Description: Please set your wordpress admin password
+    Type: String
+  Domain:
+    Description: Enter your desired domain name in lower case
+    Type: String
+    Default: your_domain
+Mappings:
+  Configuration:
+    Settings:
+      AppMaxMem: '200'
+      AppTaskMinCount: '1'
+      AppTaskDesiredCount: '1'
+      HealthTarget: "/"
+      SSLCert: TBD
+      Port: 80
+Conditions:
+  FullConfig:
+    Fn::Equals:
+    - Ref: ConfigType
+    - FullConfig
+Resources:
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      SecurityGroups:
+      - Fn::ImportValue: Security-SGLoadBalancer
+      Name: ALB
+      Scheme: internet-facing
+      Subnets:
+      - Fn::ImportValue: Network-SubnetPublic1
+      - Fn::ImportValue: Network-SubnetPublic2
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '60'
+      Tags:
+      - Key: Name
+        Value:
+          Ref: AWS::StackName
+  TG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn: ALB
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath:
+        Fn::FindInMap:
+        - Configuration
+        - Settings
+        - HealthTarget
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Matcher:
+        HttpCode: '301,302'
+      Name:
+        Ref: AWS::StackName
+      Port: 80
+      Protocol: HTTP
+      TargetGroupAttributes:
+      - Key: deregistration_delay.timeout_seconds
+        Value: '30'
+      - Key: stickiness.enabled
+        Value: 'false'
+      - Key: stickiness.lb_cookie.duration_seconds
+        Value: '3600'
+      - Key: stickiness.type
+        Value: lb_cookie
+      Tags:
+      - Key: Name
+        Value:
+          Ref: AWS::StackName
+      UnhealthyThresholdCount: 3
+      VpcId:
+        Fn::ImportValue: Network-VPC
+  ListenerHTTP:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: TG
+      LoadBalancerArn:
+        Ref: ALB
+      Port: '80'
+      Protocol: HTTP
+  ListenerHTTPS:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: FullConfig
+    Properties:
+      Certificates:
+        - CertificateArn:
+            Fn::FindInMap:
+            - Configuration
+            - Settings
+            - SSLCert
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: TG
+      LoadBalancerArn:
+        Ref: ALB
+      Port: '443'
+      Protocol: HTTPS
+  ListenerRuleHTTP:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    DependsOn: ListenerHTTP
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: TG
+      Conditions:
+        - Field: path-pattern
+          Values:
+          - "/"
+      ListenerArn:
+        Ref: ListenerHTTP
+      Priority: 1
+  CloudwatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Join:
+          - "-"
+          - - ECSLogGroup
+            - Ref: AWS::StackName
+      RetentionInDays: 14
+  Taskdefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family:
+        Ref: AWS::StackName
+      ContainerDefinitions:
+        - Name: wordpress
+          Cpu: '100'
+          Environment:
+            - Name: WORDPRESS_DB_PASSWORD
+              Value: 
+                Ref: Password
+          Essential: 'true'
+          Hostname: wordpress
+          Image: wordpress
+          Links:
+           - 'mysql:mysql'
+          Memory:
+            Fn::FindInMap:
+              - Configuration
+              - Settings
+              - AppMaxMem
+          MountPoints:
+          - ContainerPath: "/var/www/html"
+            SourceVolume: volwordpress
+            ReadOnly: 'false'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group:
+                Ref: CloudwatchLogsGroup
+              awslogs-region:
+                Ref: AWS::Region
+              awslogs-stream-prefix:
+                Fn::Join:
+                - ''
+                - - ecs-
+                  - Ref: Domain
+          PortMappings:
+            - ContainerPort: 80
+        - Name: mysql
+          Cpu: '100'
+          Environment:
+            - Name: MYSQL_ROOT_PASSWORD
+              Value: 
+                Ref: Password
+          Essential: 'true'
+          Hostname: mysql
+          Image: mysql
+          Memory:
+            Fn::FindInMap:
+              - Configuration
+              - Settings
+              - AppMaxMem
+          MountPoints:
+          - ContainerPath: "/var/lib/mysql"
+            SourceVolume: volmysql
+            ReadOnly: 'false'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group:
+                Ref: CloudwatchLogsGroup
+              awslogs-region:
+                Ref: AWS::Region
+              awslogs-stream-prefix:
+                Fn::Join:
+                  - ''
+                  - - ecs-
+                    - Ref: Domain
+          PortMappings:
+            - ContainerPort: 3306
+      Volumes:
+        - Name: volwordpress
+          Host:
+            SourcePath: /home/ec2-user
+        - Name: volmysql
+          Host:
+            SourcePath: /home/ec2-user
+  service:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - ListenerHTTP
+    Properties:
+      Cluster:
+        Fn::ImportValue: SharedResources-Cluster
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DesiredCount: 
+        Fn::FindInMap:
+          - Configuration
+          - Settings
+          - AppTaskDesiredCount
+      LoadBalancers:
+        - ContainerName: wordpress
+          ContainerPort:
+            Fn::FindInMap:
+            - Configuration
+            - Settings
+            - Port
+          TargetGroupArn:
+            Ref: TG
+      PlacementStrategies:
+        - Field: attribute:ecs.availability-zone
+          Type: spread
+        - Field: memory
+          Type: binpack
+      Role:
+        Fn::ImportValue: Security-RoleECSService
+      TaskDefinition:
+        Ref: Taskdefinition
+  ServiceScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: service
+    Properties:
+      MaxCapacity: 8
+      MinCapacity:
+        Fn::FindInMap:
+          - Configuration
+          - Settings
+          - AppTaskMinCount
+      ResourceId:
+        Fn::Join:
+          - ''
+          - - service/
+            - Fn::ImportValue: SharedResources-Cluster
+            - "/"
+            - Fn::GetAtt:
+              - service
+              - Name
+      RoleARN:
+        Fn::ImportValue: Security-RoleAutoscaling
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+  ServiceScalingPolicyUp:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: StepPolicyUp
+      PolicyType: StepScaling
+      ScalingTargetId:
+        Ref: ServiceScalingTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 60
+        MetricAggregationType: Average
+        StepAdjustments:
+          - MetricIntervalLowerBound: 0
+            ScalingAdjustment: 1
+  ServiceScalingPolicyDown:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: StepPolicyDown
+      PolicyType: StepScaling
+      ScalingTargetId:
+        Ref: ServiceScalingTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 60
+        MetricAggregationType: Average
+        StepAdjustments:
+          - MetricIntervalUpperBound: 0
+            ScalingAdjustment: -1
+  AlarmUpServiceMemory:
+    Type: AWS::CloudWatch::Alarm
+    Condition: FullConfig
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: '75'
+      AlarmDescription: Avg service memory
+      Period: '60'
+      AlarmActions:
+        - Ref: ServiceScalingPolicyUp
+      Namespace: AWS/ECS
+      Dimensions:
+        - Name: ClusterName
+          Value:
+            Fn::ImportValue: SharedResources-Cluster
+        - Name: ServiceName
+          Value:
+            Fn::GetAtt:
+            - service
+            - Name
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: MemoryUtilization
+      TreatMissingData: breaching
+  AlarmDownServiceMemory:
+    Type: AWS::CloudWatch::Alarm
+    Condition: FullConfig
+    Properties:
+      EvaluationPeriods: '10'
+      Statistic: Average
+      Threshold: '20'
+      AlarmDescription: Avg service memory
+      Period: '60'
+      AlarmActions:
+        - Ref: ServiceScalingPolicyDown
+      Namespace: AWS/ECS
+      Dimensions:
+        - Name: ClusterName
+          Value:
+            Fn::ImportValue: SharedResources-Cluster
+        - Name: ServiceName
+          Value:
+            Fn::GetAtt:
+            - service
+            - Name
+      ComparisonOperator: LessThanThreshold
+      MetricName: MemoryUtilization
+      TreatMissingData: breaching
+  AlarmEmailALB500:
+    Type: AWS::CloudWatch::Alarm
+    Condition: FullConfig
+    Properties:
+      EvaluationPeriods: '1'
+      Statistic: Average
+      Threshold: '10'
+      AlarmDescription: Alarm if our ALB generates too many HTTP 500s.
+      Period: '60'
+      AlarmActions:
+        - Fn::Join:
+          - ''
+          - - 'arn:aws:sns:'
+            - Ref: AWS::Region
+            - ":"
+            - Ref: AWS::AccountId
+            - ":Fixed-"
+            - Ref: Domain
+      Namespace: AWS/ApplicationELB
+      Dimensions:
+        - Name: LoadBalancer
+          Value:
+            Fn::GetAtt:
+            - ALB
+            - LoadBalancerFullName
+        - Name: TargetGroup
+          Value:
+            Fn::GetAtt:
+            - TG
+            - TargetGroupFullName
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: HTTPCode_Target_5XX_Count
+      TreatMissingData: ignore
+  Route53Entry:
+    Type: AWS::Route53::RecordSet
+    Condition: FullConfig
+    DependsOn: ALB
+    Properties:
+      AliasTarget:
+        DNSName:
+          Fn::GetAtt:
+            - ALB
+            - DNSName
+        EvaluateTargetHealth: 'False'
+        HostedZoneId:
+          Fn::GetAtt:
+            - ALB
+            - CanonicalHostedZoneID
+      HostedZoneId:
+        Fn::ImportValue: SharedResources-HostedZone
+      Name:
+        Ref: AWS::StackName
+      Type: A

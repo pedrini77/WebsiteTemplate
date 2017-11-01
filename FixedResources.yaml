@@ -1,0 +1,148 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Fixed Resources
+Parameters:
+  ConfigType:
+    Description: Free only or Full (includes HTTPS, Alarms & Route53 DNS entry)
+    Type: String
+    AllowedValues:
+    - FullConfig
+    - SmallConfig
+  Email:
+    Description: Enter Email where to receive notifications
+    Type: String
+    Default: your_email@domain.com
+  Domain:
+    Description: Enter your desired domain name in lower case
+    Type: String
+    Default: your_domain
+Conditions:
+  FullConfig:
+    Fn::Equals:
+    - Ref: ConfigType
+    - FullConfig    
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Fn::Join:
+            - ''
+            - - Ref: Domain
+              - '-'
+              - Ref: AWS::Region
+              - '-'
+              - Ref: AWS::AccountId
+      VersioningConfiguration:
+        Status: Enabled
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: S3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: AddCannedAcl
+          Effect: Allow
+          Action: s3:*
+          Resource:
+            Fn::Join:
+            - ''
+            - - 'arn:aws:s3:::'
+              - Ref: S3Bucket
+              - "/*"
+          Principal:
+            AWS:
+              Fn::Join:
+              - ''
+              - - 'arn:aws:iam::'
+                - Ref: AWS::AccountId
+                - ":root"
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Condition: FullConfig
+    Properties:
+      Name:
+        Fn::Join:
+        - ''
+        - - aws
+          - "."
+          - Ref: Domain
+          - ".com"
+  Topic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName:
+        Ref: AWS::StackName
+      Subscription:
+      - Endpoint: 
+          Ref: Email
+        Protocol: email
+      TopicName:
+        Ref: AWS::StackName
+  EFS:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      FileSystemTags:
+      - Key: Name
+        Value:
+          Ref: AWS::StackName
+      PerformanceMode: generalPurpose
+  MountTarget1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFS
+      SubnetId:
+        Fn::ImportValue: Network-SubnetPrivate1
+      SecurityGroups:
+      - Fn::ImportValue: Security-SGMountTarget
+  MountTarget2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFS
+      SubnetId:
+        Fn::ImportValue: Network-SubnetPrivate2
+      SecurityGroups:
+      - Fn::ImportValue: Security-SGMountTarget
+  ECRRepo:
+    Type: AWS::ECR::Repository
+    Properties: 
+      RepositoryName: 
+        Ref: Domain
+      RepositoryPolicyText:
+        Version: '2012-10-17'
+        Statement: 
+          - Sid: 
+              Ref: AWS::StackName
+            Effect: Allow
+            Principal: 
+              AWS:
+                -  Fn::Sub: "arn:aws:iam::${AWS::AccountId}:root"
+            Action: 
+              - ecr:*
+Outputs:
+  S3bucket:
+    Description: S3 bucket for Continuous Deployment files
+    Value:
+      Ref: S3Bucket
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-S3bucket"
+  HostedZone:
+    Description: Hosted Zone
+    Condition: FullConfig
+    Value:
+      Ref: HostedZone
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-HostedZone"
+  Topic:
+    Description: Topic to notify
+    Value:
+      Ref: Topic
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-Topic"

@@ -1,12 +1,31 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Shared Resources
+Parameters:
+  ConfigType:
+    Description: Free only or Full (includes AutoScaling Increase alarms and Auto Scale In)
+    Type: String
+    AllowedValues:
+    - FullConfig
+    - SmallConfig
 Mappings:
   Conf:
     Settings:
-      AvailabilityZone1: us-east-1b
-      AvailabilityZone2: us-east-1c
+      AvailabilityZone1: us-east-1d
+      AvailabilityZone2: us-east-1e
+Conditions:
+  FullConfig:
+    Fn::Equals:
+    - Ref: ConfigType
+    - FullConfig
 Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Fn::Sub: "${AWS::Region}-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
   Cluster:
     Type: AWS::ECS::Cluster
     Properties:
@@ -15,6 +34,7 @@ Resources:
   LaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
+      AssociatePublicIpAddress: true
       BlockDeviceMappings:
       - DeviceName: "/dev/xvdcz"
         Ebs:
@@ -22,7 +42,7 @@ Resources:
           VolumeType: gp2
           DeleteOnTermination: 'true'
       IamInstanceProfile:
-        Fn::ImportValue: EC2-InstanceProfile
+        Fn::ImportValue: Security-InstanceProfileEC2
       ImageId: ami-9eb4b1e5
       InstanceMonitoring: 'False'
       InstanceType: t2.micro
@@ -51,19 +71,19 @@ Resources:
         - Settings
         - AvailabilityZone2
       Cooldown: '500'
-      DesiredCapacity: '1'
+      DesiredCapacity: '0'
       HealthCheckGracePeriod: '300'
       HealthCheckType: EC2
       MaxSize: '4'
-      MinSize: '1'
+      MinSize: '0'
       Tags:
       - Key: Name
         Value:
           Ref: AWS::StackName
         PropagateAtLaunch: 'True'
       VPCZoneIdentifier:
-      - Fn::ImportValue: Network-PublicSubnet1
-      - Fn::ImportValue: Network-PublicSubnet2
+      - Fn::ImportValue: Network-SubnetPublic1
+      - Fn::ImportValue: Network-SubnetPublic2
   PolicyScaleUp:
     Type: AWS::AutoScaling::ScalingPolicy
     Properties:
@@ -75,6 +95,7 @@ Resources:
       ScalingAdjustment: '1'
   AlarmIncreaseCPUReservation:
     Type: AWS::CloudWatch::Alarm
+    Condition: FullConfig
     Properties:
       EvaluationPeriods: '3'
       Statistic: Average
@@ -94,6 +115,7 @@ Resources:
       MetricName: CPUReservation
   AlarmIncreaseMemoryReservation:
     Type: AWS::CloudWatch::Alarm
+    Condition: FullConfig
     Properties:
       EvaluationPeriods: '3'
       Statistic: Average
@@ -111,6 +133,60 @@ Resources:
           Ref: Cluster
       ComparisonOperator: GreaterThanThreshold
       MetricName: MemoryReservation
+  LambdaECS:
+    Type: AWS::Lambda::Function
+    Condition: FullConfig
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: S3Bucket
+        S3Key: CloudFormation/ecscale.zip
+      Description: Lambda function to scale in ECS clusters
+      FunctionName: ECS-Scalein
+      Handler: ecscale.lambda_handler
+      MemorySize: 128
+      Role:
+        Fn::ImportValue: Security-RoleLambdaECS
+      Runtime: python2.7
+      Timeout: 120
+      TracingConfig:
+        Mode: PassThrough
+      Tags:
+      - Key: Name
+        Value: 
+          Ref: AWS::StackName
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Condition: FullConfig
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::GetAtt:
+        - LambdaECS
+        - Arn
+      Principal: events.amazonaws.com
+      SourceAccount:
+        Ref: AWS::AccountId
+      SourceArn:
+        Fn::GetAtt:
+        - RuleLambda
+        - Arn
+  RuleLambda:
+    Type: AWS::Events::Rule
+    Condition: FullConfig
+    DependsOn: LambdaECS
+    Properties:
+      Description: Trigger Scale In Lambda every hour at the half hour
+      Name:
+        Ref: AWS::StackName
+      ScheduleExpression: cron(30 * * * ? *)
+      State: ENABLED
+      Targets:
+      - Arn:
+          Fn::GetAtt:
+          - LambdaECS
+          - Arn
+        Id: LambdaECS
 Outputs:
   Cluster:
     Description: ECS Cluster
