@@ -18,7 +18,7 @@ Parameters:
 Mappings:
   Configuration:
     Settings:
-      AppMaxMem: '200'
+      AppMaxMem: '300'
       AppTaskMinCount: '1'
       AppTaskDesiredCount: '1'
       HealthTarget: "/"
@@ -207,13 +207,96 @@ Resources:
                     - Ref: Domain
           PortMappings:
             - ContainerPort: 3306
+        - Name: backupmysql
+          Cpu: '100'
+          Environment:
+            - Name: MYSQL_HOST
+              Value: mysql
+            - Name: MYSQL_USER
+              Value: root
+            - Name: MYSQL_PASSWORD
+              Value: 
+                Ref: Password
+            - Name: S3_IAMROLE
+              Value: true
+            - Name: S3_BUCKET
+              Value:
+                Fn::Join:
+                  - ''
+                  - - Ref: Domain
+                    - '-'
+                    - Ref: AWS::Region
+                    - '-'
+                    - Ref: AWS::AccountId
+            - Name: S3_REGION
+              Value: us-east-1
+            - Name: SCHEDULE
+              Value: "@daily"
+          Essential: 'true'
+          Hostname: backupmysql
+          Image: schickling/mysql-backup-s3
+          Links:
+            - 'mysql:mysql'
+          Memory: 110
+          MountPoints:
+          - ContainerPath: "/var/lib/mysql"
+            SourceVolume: volmysql
+            ReadOnly: 'true'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group:
+                Ref: CloudwatchLogsGroup
+              awslogs-region:
+                Ref: AWS::Region
+              awslogs-stream-prefix:
+                Fn::Join:
+                  - ''
+                  - - ecs-
+                    - Ref: Domain
+        - Name: backups
+          Cpu: '100'
+          Environment:
+            - Name: S3_PATH
+              Value:
+                Fn::Join:
+                  - ''
+                  - - s3://
+                    - Ref: Domain
+                    - '-'
+                    - Ref: AWS::Region
+                    - '-'
+                    - Ref: AWS::AccountId
+                    - /backup/
+            - Name: CRON_SCHEDULE
+              Value: 0 12 * * *
+          Essential: 'false'
+          Hostname: backup
+          Image: pedrini77/backup-to-s3
+          Memory: 110
+          MountPoints:
+          - ContainerPath: "/data/"
+            SourceVolume: volwordpress
+            ReadOnly: 'true'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group:
+                Ref: CloudwatchLogsGroup
+              awslogs-region:
+                Ref: AWS::Region
+              awslogs-stream-prefix:
+                Fn::Join:
+                  - ''
+                  - - ecs-
+                    - Ref: Domain
       Volumes:
         - Name: volwordpress
           Host:
-            SourcePath: /home/ec2-user
+            SourcePath: /home/ec2-user/wordpress
         - Name: volmysql
           Host:
-            SourcePath: /home/ec2-user
+            SourcePath: /home/ec2-user/mysql
   service:
     Type: AWS::ECS::Service
     DependsOn:
@@ -222,8 +305,8 @@ Resources:
       Cluster:
         Fn::ImportValue: SharedResources-Cluster
       DeploymentConfiguration:
-        MaximumPercent: 200
-        MinimumHealthyPercent: 100
+        MaximumPercent: 100
+        MinimumHealthyPercent: 0
       DesiredCount: 
         Fn::FindInMap:
           - Configuration

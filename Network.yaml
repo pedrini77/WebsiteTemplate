@@ -67,7 +67,7 @@ Resources:
     Properties:
       NetworkAclId:
         Ref: ACL
-      RuleNumber: '105'
+      RuleNumber: '107'
       Protocol: '6'
       RuleAction: allow
       Egress: 'false'
@@ -80,7 +80,7 @@ Resources:
     Properties:
       NetworkAclId:
         Ref: ACL
-      RuleNumber: '106'
+      RuleNumber: '110'
       Protocol: '6'
       RuleAction: allow
       Egress: 'false'
@@ -94,7 +94,7 @@ Resources:
     Properties:
       NetworkAclId:
         Ref: ACL
-      RuleNumber: '107'
+      RuleNumber: '113'
       Protocol: '6'
       RuleAction: deny
       Egress: 'false'
@@ -107,7 +107,7 @@ Resources:
     Properties:
       NetworkAclId:
         Ref: ACL
-      RuleNumber: '108'
+      RuleNumber: '115'
       Protocol: '6'
       RuleAction: allow
       Egress: 'false'

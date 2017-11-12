@@ -35,6 +35,12 @@ Resources:
               - Ref: AWS::AccountId
       VersioningConfiguration:
         Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+        - Prefix: Backup
+          Status: Enabled
+          ExpirationInDays: '30'
+          NoncurrentVersionExpirationInDays: '3'
   BucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
