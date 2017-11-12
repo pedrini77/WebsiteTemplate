@@ -39,7 +39,7 @@ Resources:
         Rules:
         - Prefix: Backup
           Status: Enabled
-          ExpirationInDays: '30'
+          ExpirationInDays: '14'
           NoncurrentVersionExpirationInDays: '3'
   BucketPolicy:
     Type: AWS::S3::BucketPolicy
