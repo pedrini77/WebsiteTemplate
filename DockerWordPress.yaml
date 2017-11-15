@@ -134,7 +134,7 @@ Resources:
           - "-"
           - - ECSLogGroup
             - Ref: AWS::StackName
-      RetentionInDays: 14
+      RetentionInDays: 7
   Taskdefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -267,9 +267,9 @@ Resources:
                     - Ref: AWS::Region
                     - '-'
                     - Ref: AWS::AccountId
-                    - /backup/
+                    - /backup/wordpress/
             - Name: CRON_SCHEDULE
-              Value: 0 12 * * *
+              Value: 02 23 * * *
           Essential: 'false'
           Hostname: backup
           Image: pedrini77/backup-to-s3
@@ -293,10 +293,20 @@ Resources:
       Volumes:
         - Name: volwordpress
           Host:
-            SourcePath: /home/ec2-user/wordpress
+            SourcePath:
+              Fn::Join:
+                - ''
+                - - /home/ec2-user/
+                  - Ref: Domain
+                  - /wordpress
         - Name: volmysql
           Host:
-            SourcePath: /home/ec2-user/mysql
+            SourcePath:
+              Fn::Join:
+                - ''
+                - - /home/ec2-user/
+                  - Ref: Domain
+                  - /mysql
   service:
     Type: AWS::ECS::Service
     DependsOn:
