@@ -35,7 +35,8 @@ Resources:
     Properties:
       SecurityGroups:
       - Fn::ImportValue: Security-SGLoadBalancer
-      Name: ALB
+      Name:
+       Ref: AWS::StackName
       Scheme: internet-facing
       Subnets:
       - Fn::ImportValue: Network-SubnetPublic1
