@@ -158,6 +158,7 @@ Resources:
               - Configuration
               - Settings
               - AppMaxMem
+          MemoryReservation: 150
           MountPoints:
           - ContainerPath: "/var/www/html"
             SourceVolume: volwordpress
@@ -190,6 +191,7 @@ Resources:
               - Configuration
               - Settings
               - AppMaxMem
+          MemoryReservation: 150
           MountPoints:
           - ContainerPath: "/var/lib/mysql"
             SourceVolume: volmysql
@@ -238,7 +240,8 @@ Resources:
           Image: schickling/mysql-backup-s3
           Links:
             - 'mysql:mysql'
-          Memory: 110
+          Memory: 100
+          MemoryReservation: 50
           MountPoints:
           - ContainerPath: "/var/lib/mysql"
             SourceVolume: volmysql
@@ -274,7 +277,8 @@ Resources:
           Essential: 'false'
           Hostname: backup
           Image: pedrini77/backup-to-s3
-          Memory: 110
+          Memory: 100
+          MemoryReservation: 50
           MountPoints:
           - ContainerPath: "/data/"
             SourceVolume: volwordpress

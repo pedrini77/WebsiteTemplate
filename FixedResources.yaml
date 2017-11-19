@@ -37,7 +37,7 @@ Resources:
         Status: Enabled
       LifecycleConfiguration:
         Rules:
-        - Prefix: Backup
+        - Prefix: backup
           Status: Enabled
           ExpirationInDays: '14'
           NoncurrentVersionExpirationInDays: '3'
