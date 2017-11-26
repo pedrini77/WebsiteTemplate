@@ -62,7 +62,7 @@ Resources:
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
       Matcher:
-        HttpCode: '301,302'
+        HttpCode: '200,301,302'
       Name:
         Ref: AWS::StackName
       Port: 80
