@@ -12,9 +12,12 @@ Parameters:
     Description: Enter your IP. /32 means just your IP in CIDR notation.
     Type: String
     Default: GetYourIpFromWhatIsMyIp.com/32
+  Account:
+    Type: String
+    Default: production
 Mappings:
-  CIDRMap:
-    production:
+  production:
+    us-east-1:
       VPC: 10.77.0.0/16
       SubnetPublic1: 10.77.0.0/24
       SubnetPublic2: 10.77.1.0/24
@@ -163,8 +166,8 @@ Resources:
         Ref: VPC
       CidrBlock:
         Fn::FindInMap:
-        - CIDRMap
-        - production
+        - Ref: Account
+        - Ref: AWS::Region
         - SubnetPublic1
       AvailabilityZone: us-east-1d
       Tags:
@@ -178,8 +181,8 @@ Resources:
         Ref: VPC
       CidrBlock:
         Fn::FindInMap:
-        - CIDRMap
-        - production
+        - Ref: Account
+        - Ref: AWS::Region
         - SubnetPublic2
       AvailabilityZone: us-east-1e
       Tags:
@@ -193,8 +196,8 @@ Resources:
         Ref: VPC
       CidrBlock:
         Fn::FindInMap:
-        - CIDRMap
-        - production
+        - Ref: Account
+        - Ref: AWS::Region
         - SubnetPrivate1
       AvailabilityZone: us-east-1d
       Tags:
@@ -208,8 +211,8 @@ Resources:
         Ref: VPC
       CidrBlock:
         Fn::FindInMap:
-        - CIDRMap
-        - production
+        - Ref: Account
+        - Ref: AWS::Region
         - SubnetPrivate2
       AvailabilityZone: us-east-1e
       Tags:
@@ -287,8 +290,8 @@ Resources:
       EnableDnsHostnames: 'true'
       CidrBlock:
         Fn::FindInMap:
-        - CIDRMap
-        - production
+        - Ref: Account
+        - Ref: AWS::Region
         - VPC
       Tags:
       - Key: Application

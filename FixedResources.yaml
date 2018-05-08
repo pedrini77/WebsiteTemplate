@@ -144,7 +144,7 @@ Outputs:
       Ref: HostedZone
     Export:
       Name:
-        Fn::Sub: "${AWS::StackName}-HostedZone"
+        Fn::Sub: "${AWS::StackName}-${AWS::Region}-HostedZone"
   Topic:
     Description: Topic to notify
     Value:

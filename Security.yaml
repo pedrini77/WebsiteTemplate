@@ -240,7 +240,7 @@ Outputs:
       - Arn
     Export:
       Name:
-        Fn::Sub: "${AWS::StackName}-RoleECSService"
+        Fn::Sub: "${AWS::StackName}-${AWS::Region}-RoleECSService"
   RoleAutoscaling:
     Description: Role needed for ECS AutoScaling
     Value:
@@ -249,7 +249,7 @@ Outputs:
       - Arn
     Export:
       Name:
-        Fn::Sub: "${AWS::StackName}-RoleAutoscaling"
+        Fn::Sub: "${AWS::StackName}-${AWS::Region}-RoleAutoscaling"
   RoleLambdaECS:
     Description: Role needed for ECS AutoScaling
     Value:
@@ -258,7 +258,7 @@ Outputs:
       - Arn
     Export:
       Name:
-        Fn::Sub: "${AWS::StackName}-RoleLambdaECS"
+        Fn::Sub: "${AWS::StackName}-${AWS::Region}-RoleLambdaECS"
   InstanceProfileEC2:
     Description: Instance Profile for ECS Instance
     Value:
@@ -267,4 +267,4 @@ Outputs:
       - Arn
     Export:
       Name:
-        Fn::Sub: "${AWS::StackName}-InstanceProfileEC2"
+        Fn::Sub: "${AWS::StackName}-${AWS::Region}-InstanceProfileEC2"
