@@ -175,7 +175,6 @@ Resources:
             - edgelambda.amazonaws.com
             - lambda.amazonaws.com
           Action: sts:AssumeRole
-      RoleName: USN-LambdaECS
       Policies:
       - PolicyName: lambda-service
         PolicyDocument:
@@ -184,26 +183,14 @@ Resources:
             Effect: Allow
             Action:
             - ecs:*
-            Resource:
-            - "*"
-          - Sid: Stmt1000000000008
-            Effect: Allow
-            Action:
             - ec2:*
-            Resource:
-            - "*"
-          - Sid: Stmt1000000000007
-            Effect: Allow
-            Action:
             - cloudwatch:*
-            Resource:
-            - "*"
-          - Sid: Stmt10000000000006
-            Effect: Allow
-            Action:
+            - logs:*
             - autoscaling:*
             Resource:
             - "*"
+      RoleName:
+        Fn::Sub: "${AWS::StackName}-LambdaECS"
   InstanceProfileEC2:
     Type: AWS::IAM::InstanceProfile
     Properties:
