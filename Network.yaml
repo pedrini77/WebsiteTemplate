@@ -169,7 +169,11 @@ Resources:
         - Ref: Account
         - Ref: AWS::Region
         - SubnetPublic1
-      AvailabilityZone: us-east-1d
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs:
+              Ref: AWS::Region
       Tags:
       - Key: Application
         Value:
@@ -184,7 +188,11 @@ Resources:
         - Ref: Account
         - Ref: AWS::Region
         - SubnetPublic2
-      AvailabilityZone: us-east-1e
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs:
+              Ref: AWS::Region
       Tags:
       - Key: Application
         Value:
@@ -199,7 +207,11 @@ Resources:
         - Ref: Account
         - Ref: AWS::Region
         - SubnetPrivate1
-      AvailabilityZone: us-east-1d
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs:
+              Ref: AWS::Region
       Tags:
       - Key: Application
         Value:
@@ -214,7 +226,11 @@ Resources:
         - Ref: Account
         - Ref: AWS::Region
         - SubnetPrivate2
-      AvailabilityZone: us-east-1e
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs:
+              Ref: AWS::Region
       Tags:
       - Key: Application
         Value:
@@ -380,3 +396,35 @@ Outputs:
     Export:
       Name:
         Fn::Sub: "${AWS::StackName}-SubnetPublic2"
+  AZ1Public:
+    Value:
+      Fn::GetAtt:
+        - SubnetPublic1
+        - AvailabilityZone
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-AZPublic1"
+  AZ2Public:
+    Value:
+      Fn::GetAtt:
+        - SubnetPublic2
+        - AvailabilityZone
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-AZPublic2"
+  AZ1Private:
+    Value:
+      Fn::GetAtt:
+        - SubnetPrivate1
+        - AvailabilityZone
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-AZPrivate1"
+  AZ2Private:
+    Value:
+      Fn::GetAtt:
+        - SubnetPrivate2
+        - AvailabilityZone
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-AZPrivate2"
